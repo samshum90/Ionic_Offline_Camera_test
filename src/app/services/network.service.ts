@@ -1,7 +1,9 @@
 import { Injectable } from '@angular/core';
-import { Network } from '@ionic-native/network/ngx'
+import { Plugins, NetworkStatus } from '@capacitor/core';
 import { Platform, ToastController } from '@ionic/angular';
 import { BehaviorSubject, Observable } from 'rxjs';
+
+const { Network } = Plugins;
 
 export enum ConnectionStatus {
   Online,
@@ -12,31 +14,50 @@ export enum ConnectionStatus {
   providedIn: 'root'
 })
 export class NetworkService {
-
+  networkStatus: NetworkStatus;
   private status: BehaviorSubject<ConnectionStatus> = new BehaviorSubject(ConnectionStatus.Offline);
 
-  constructor(private network: Network, private toastController: ToastController, private plt: Platform) {
-    this.plt.ready().then(() => {
+  constructor(private toastController: ToastController, private plt: Platform) {
+    this.plt.ready().then(async () => {
       this.initializeNetworkEvents();
-      let status = this.network.type !== 'none' ? ConnectionStatus.Online : ConnectionStatus.Offline;
+      this.networkStatus = await Network.getStatus()
+      let status = this.networkStatus.connected ? ConnectionStatus.Online : ConnectionStatus.Offline;
       this.status.next(status);
     });
   }
+  public onNetworkChange(): Observable<ConnectionStatus> {
+    return this.status.asObservable();
+  }
+
+  public getCurrentNetworkStatus(): ConnectionStatus {
+    return this.status.getValue();
+  }
 
   public initializeNetworkEvents() {
-
-    this.network.onDisconnect().subscribe(() => {
+    Network.addListener('networkStatusChange', (res) => {
       if (this.status.getValue() === ConnectionStatus.Online) {
         console.log('WE ARE OFFLINE');
         this.updateNetworkStatus(ConnectionStatus.Offline);
+      } else {
+        if (this.status.getValue() === ConnectionStatus.Offline) {
+          console.log('WE ARE ONLINE');
+          this.updateNetworkStatus(ConnectionStatus.Online);
+        }
       }
-    });
 
-    this.network.onConnect().subscribe(() => {
-      if (this.status.getValue() === ConnectionStatus.Offline) {
-        console.log('WE ARE ONLINE');
-        this.updateNetworkStatus(ConnectionStatus.Online);
-      }
+
+      // this.network.onDisconnect().subscribe(() => {
+      //   if (this.status.getValue() === ConnectionStatus.Online) {
+      //     console.log('WE ARE OFFLINE');
+      //     this.updateNetworkStatus(ConnectionStatus.Offline);
+      //   }
+      // });
+
+      // this.network.onConnect().subscribe(() => {
+      //   if (this.status.getValue() === ConnectionStatus.Offline) {
+      //     console.log('WE ARE ONLINE');
+      //     this.updateNetworkStatus(ConnectionStatus.Online);
+      //   }
     });
   }
 
@@ -52,11 +73,4 @@ export class NetworkService {
     toast.then(toast => toast.present());
   }
 
-  public onNetworkChange(): Observable<ConnectionStatus> {
-    return this.status.asObservable();
-  }
-
-  public getCurrentNetworkStatus(): ConnectionStatus {
-    return this.status.getValue();
-  }
 }
